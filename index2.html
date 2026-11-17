@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f766e">
 <title>Sổ chi tiêu</title>
+<script>
+  // Điền 2 giá trị lấy từ Supabase (Project Settings -> API). Để trống = chạy offline, không đăng nhập.
+  window.APP_CONFIG={SUPABASE_URL:"https://gjaclmdgdpksuumvpseu.supabase.co",SUPABASE_ANON_KEY:"sb_publishable_8R3DWtjtVzIjZ81KaCI3wA_okgrUc7T"};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <style>
   :root{
     --bg:#eef3f1; --card:#ffffff; --text:#12211e; --muted:#62756f; --line:#e4ebe8; --field:#f4f7f6;
@@ -115,7 +120,10 @@
   /* lock */
   #lock{display:none;position:fixed;inset:0;z-index:50;align-items:center;justify-content:center;padding:24px;background:var(--hero)}
   .locked #lock{display:flex}
-  .locked .wrap,.locked nav{display:none}
+  .locked .wrap,.locked nav,.needauth .wrap,.needauth nav{display:none}
+  #auth{display:none;position:fixed;inset:0;z-index:55;align-items:center;justify-content:center;padding:24px;background:var(--hero);overflow:auto}
+  .needauth #auth{display:flex}
+  .seg.two{grid-template-columns:1fr 1fr}
   .lock-card{background:var(--card);border-radius:28px;padding:30px 24px 22px;width:min(92vw,360px);text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.3)}
   .lock-ico{width:68px;height:68px;border-radius:22px;margin:0 auto 12px;display:grid;place-items:center;font-size:2rem;background:var(--soft)}
   .lock-card input{text-align:center;font-size:1.1rem;margin:14px 0 10px}
@@ -126,6 +134,23 @@
 </head>
 <body>
 <script>try{if(localStorage.getItem("so-chi-tieu:lock"))document.body.classList.add("locked")}catch(e){}</script>
+<script>try{var c=window.APP_CONFIG||{};if(c.SUPABASE_URL&&c.SUPABASE_ANON_KEY&&window.supabase&&!Object.keys(localStorage).some(function(k){return /^sb-.*-auth-token$/.test(k)}))document.body.classList.add("needauth")}catch(e){}</script>
+
+<div id="auth">
+  <div class="lock-card">
+    <div class="lock-ico">☁️</div>
+    <h1>Sổ chi tiêu</h1>
+    <div class="muted">Đăng nhập để dữ liệu đồng bộ giữa máy tính và điện thoại</div>
+    <div class="seg two" style="margin:14px 0 0"><button type="button" id="tabIn" class="on">Đăng nhập</button><button type="button" id="tabUp">Tạo tài khoản</button></div>
+    <form id="authForm">
+      <input type="email" id="authEmail" placeholder="Email" autocomplete="email" required>
+      <input type="password" id="authPw" placeholder="Mật khẩu (tối thiểu 6 ký tự)" autocomplete="current-password" required minlength="6">
+      <button class="btn" type="submit" id="authBtn" style="width:100%">Đăng nhập</button>
+      <div id="authMsg" class="over" style="min-height:1.4em;margin-top:8px;font-size:.88rem"></div>
+    </form>
+    <button class="link" id="authForgot" type="button">Quên mật khẩu?</button>
+  </div>
+</div>
 
 <div id="lock">
   <div class="lock-card">
@@ -241,6 +266,15 @@
 
   <!-- ===== CÀI ĐẶT ===== -->
   <section data-tab="settings">
+    <div class="card" id="acctCard" hidden>
+      <h2>☁️ Tài khoản và đồng bộ</h2>
+      <div class="muted">Đang đăng nhập: <b id="acctEmail"></b></div>
+      <div class="muted" id="syncStatus" style="margin:4px 0 12px"></div>
+      <div class="row">
+        <button class="btn small" id="syncNow" type="button">Đồng bộ ngay</button>
+        <button class="btn ghost small" id="signOut" type="button">Đăng xuất</button>
+      </div>
+    </div>
     <div class="card">
       <div class="row" style="margin-bottom:6px"><h2 style="margin:0">🔐 Mật khẩu</h2><span class="spacer"></span><span id="pwStatus"></span></div>
       <p class="muted" style="margin-top:0">Màn hình khóa giúp người dùng chung máy không xem được sổ của bạn. Lưu ý: dữ liệu vẫn nằm trong trình duyệt và không được mã hóa.</p>
@@ -305,7 +339,7 @@
 const CATS_EXP=[["Ăn uống","🍜"],["Đi lại","🛵"],["Mua sắm","🛍️"],["Nhà cửa","🏠"],["Hóa đơn","🧾"],["Giải trí","🎬"],["Sức khỏe","💊"],["Học tập","📚"],["Khác","📌"]];
 const CATS_INC=[["Lương","💰"],["Thu khác","🎁"]];
 const HUE={"Ăn uống":25,"Đi lại":210,"Mua sắm":320,"Nhà cửa":150,"Hóa đơn":48,"Giải trí":268,"Sức khỏe":2,"Học tập":190,"Khác":220,"Lương":140,"Thu khác":160};
-const KEY="so-chi-tieu:v2", LKEY="so-chi-tieu:lock";
+const KEY="so-chi-tieu:v2", LKEY="so-chi-tieu:lock", META="so-chi-tieu:meta";
 const $=id=>document.getElementById(id);
 const nf=new Intl.NumberFormat("vi-VN");
 const fmt=n=>nf.format(Math.round(n))+" ₫";
@@ -332,7 +366,7 @@ function load(){
   return d;
 }
 let S=load(), editId=null, type="expense";
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch{alert("Không lưu được dữ liệu (bộ nhớ trình duyệt bị chặn).")}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch{alert("Không lưu được dữ liệu (bộ nhớ trình duyệt bị chặn).")}afterSave()}
 
 const cardName=id=>(S.cards.find(c=>c.id===id)||{name:"(thẻ đã xóa)"}).name;
 const personName=id=>(S.people.find(p=>p.id===id)||{name:"(đã xóa)"}).name;
@@ -709,8 +743,8 @@ $("lockForm").addEventListener("submit",async e=>{
   }
 });
 $("lockForgot").addEventListener("click",()=>{
-  if(confirm("Cách duy nhất để đặt lại là XÓA TOÀN BỘ dữ liệu và mật khẩu trên thiết bị này. Chỉ nên làm khi bạn đã có file sao lưu. Tiếp tục?")&&confirm("Chắc chắn xóa? Không thể hoàn tác.")){
-    try{localStorage.removeItem(KEY);localStorage.removeItem(LKEY)}catch{}
+  if(confirm("Cách duy nhất để đặt lại là XÓA TOÀN BỘ dữ liệu và mật khẩu trên thiết bị này. Chỉ nên làm khi bạn đã có file sao lưu. (Nếu đang đăng nhập đồng bộ, dữ liệu sẽ được tải lại từ tài khoản.) Tiếp tục?")&&confirm("Chắc chắn xóa? Không thể hoàn tác.")){
+    try{localStorage.removeItem(KEY);localStorage.removeItem(LKEY);localStorage.removeItem(META)}catch{}
     location.reload();
   }
 });
@@ -730,6 +764,165 @@ $("month").value=today().slice(0,7);$("date").value=today();
 initInputs();setType("expense");render();renderSecurity();
 if(document.body.classList.contains("locked")&&!LOCK)document.body.classList.remove("locked");
 if(document.body.classList.contains("locked"))setTimeout(()=>$("lockPw").focus(),50);
+
+/* ---------- Tài khoản và đồng bộ (Supabase) ---------- */
+const CFG=window.APP_CONFIG||{};
+let sb=null,user=null,pushT=null,pushing=false;
+let meta={uid:null,syncedAt:null,dirty:false};
+try{meta={...meta,...(JSON.parse(localStorage.getItem(META))||{})}}catch{}
+const saveMeta=()=>{try{localStorage.setItem(META,JSON.stringify(meta))}catch{}};
+const ts=x=>x?new Date(x).getTime():0;
+function setStatus(t,bad){const el=$("syncStatus");el.textContent=t;el.className=bad?"over":"muted";el.style.fontSize=".88rem"}
+const okStatus=()=>setStatus("Đã đồng bộ ✓ lúc "+new Date().toLocaleTimeString("vi-VN"));
+function errText(e){
+  const m=String((e&&e.message)||e);
+  if(/Invalid login/i.test(m))return"Sai email hoặc mật khẩu.";
+  if(/already registered/i.test(m))return"Email này đã được đăng ký, hãy chọn Đăng nhập.";
+  if(/Password should be/i.test(m))return"Mật khẩu cần tối thiểu 6 ký tự.";
+  if(/not confirmed/i.test(m))return"Email chưa được xác nhận. Hãy mở email và bấm link xác nhận.";
+  if(/rate limit/i.test(m))return"Thao tác quá nhiều lần, vui lòng thử lại sau ít phút.";
+  if(/Failed to fetch|NetworkError|Load failed/i.test(m))return"Không kết nối được mạng.";
+  if(/does not exist|schema cache/i.test(m))return"Chưa tạo bảng dữ liệu trên Supabase (hãy chạy file supabase.sql).";
+  return m;
+}
+function normalize(d){
+  const x=defaults();d=d&&typeof d==="object"?d:{};
+  return{settings:{...x.settings,...(d.settings||{})},cards:Array.isArray(d.cards)?d.cards:x.cards,people:Array.isArray(d.people)?d.people:x.people,tx:Array.isArray(d.tx)?d.tx:[]};
+}
+function mergeData(a,b){ // a = trên máy này (ưu tiên), b = trên tài khoản
+  const byId=(x,y)=>{const m=new Map();[...y,...x].forEach(i=>m.set(i.id,i));return[...m.values()]};
+  return{settings:a.settings,cards:byId(a.cards,b.cards),people:byId(a.people,b.people),tx:byId(a.tx,b.tx)};
+}
+function writeLocal(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch{}}
+function refreshUI(){initInputs();setType(type);render()}
+function applyData(d){S=normalize(d);writeLocal();refreshUI()}
+function afterSave(){if(!sb||!user)return;meta.dirty=true;saveMeta();schedulePush()}
+function schedulePush(){clearTimeout(pushT);setStatus("Đang chờ đồng bộ…");pushT=setTimeout(push,1200)}
+const fetchRemote=()=>sb.from("ledgers").select("data,updated_at").eq("user_id",user.id).maybeSingle();
+
+async function push(){
+  if(!sb||!user)return true;
+  if(pushing){schedulePush();return false}
+  pushing=true;
+  try{
+    const {data:r,error:e0}=await fetchRemote();
+    if(e0)throw e0;
+    if(r&&ts(r.updated_at)!==ts(meta.syncedAt)){ // thiết bị khác vừa thay đổi -> gộp
+      S=mergeData(S,normalize(r.data));writeLocal();refreshUI();
+    }
+    const now=new Date().toISOString();
+    const {error}=await sb.from("ledgers").upsert({user_id:user.id,data:S,updated_at:now});
+    if(error)throw error;
+    meta={uid:user.id,syncedAt:now,dirty:false};saveMeta();okStatus();
+    return true;
+  }catch(err){setStatus("Chưa đồng bộ được: "+errText(err),true);return false}
+  finally{pushing=false}
+}
+async function pullIfChanged(){
+  if(!sb||!user||pushing||meta.dirty)return;
+  const {data:r,error}=await fetchRemote();
+  if(error||!r)return;
+  if(ts(r.updated_at)!==ts(meta.syncedAt)){
+    applyData(r.data);meta.syncedAt=r.updated_at;saveMeta();okStatus();toast("Đã cập nhật dữ liệu từ thiết bị khác");
+  }
+}
+async function syncOnLogin(){
+  setStatus("Đang đồng bộ…");
+  if(meta.uid&&meta.uid!==user.id){ // dữ liệu trên máy thuộc tài khoản khác
+    S=defaults();writeLocal();meta={uid:null,syncedAt:null,dirty:false};saveMeta();refreshUI();
+  }
+  const {data:r,error}=await fetchRemote();
+  if(error)return setStatus("Chưa đồng bộ được: "+errText(error),true);
+  if(!r){meta.dirty=true;await push();return}              // tài khoản mới: đưa dữ liệu trên máy lên
+  const remote=normalize(r.data);
+  if(meta.uid===user.id){
+    if(meta.dirty)await push();
+    else if(ts(r.updated_at)!==ts(meta.syncedAt)){applyData(remote);meta={uid:user.id,syncedAt:r.updated_at,dirty:false};saveMeta();okStatus()}
+    else okStatus();
+    return;
+  }
+  if(S.tx.length>0&&confirm("Máy này đang có dữ liệu chưa đồng bộ, và tài khoản cũng đã có dữ liệu.\n\nBấm OK để GỘP cả hai (khuyên dùng).\nBấm Hủy để dùng dữ liệu trên tài khoản và bỏ dữ liệu trên máy này.")){
+    S=mergeData(S,remote);writeLocal();refreshUI();
+    meta={uid:user.id,syncedAt:r.updated_at,dirty:true};saveMeta();await push();return;
+  }
+  applyData(remote);meta={uid:user.id,syncedAt:r.updated_at,dirty:false};saveMeta();okStatus();
+}
+
+let authMode="in";
+function setAuthMode(m){
+  authMode=m;$("tabIn").classList.toggle("on",m==="in");$("tabUp").classList.toggle("on",m==="up");
+  $("authBtn").textContent=m==="in"?"Đăng nhập":"Tạo tài khoản";
+  $("authPw").autocomplete=m==="in"?"current-password":"new-password";
+  $("authMsg").textContent="";
+}
+$("tabIn").addEventListener("click",()=>setAuthMode("in"));
+$("tabUp").addEventListener("click",()=>setAuthMode("up"));
+function showAuth(){document.body.classList.add("needauth");$("acctEmail").textContent="";setAuthMode("in")}
+async function afterLogin(session){
+  user=session.user;$("acctEmail").textContent=user.email||"";
+  document.body.classList.remove("needauth");
+  await syncOnLogin();
+}
+$("authForm").addEventListener("submit",async e=>{
+  e.preventDefault();if(!sb)return;
+  const email=$("authEmail").value.trim(),pw=$("authPw").value,msg=$("authMsg");
+  msg.className="over";msg.textContent="Đang xử lý…";$("authBtn").disabled=true;
+  try{
+    const res=authMode==="in"?await sb.auth.signInWithPassword({email,password:pw}):await sb.auth.signUp({email,password:pw});
+    if(res.error)throw res.error;
+    if(!res.data||!res.data.session){msg.className="ok";msg.textContent="Đã gửi email xác nhận. Hãy bấm link trong email rồi quay lại đăng nhập.";return}
+    $("authPw").value="";msg.textContent="";
+    await afterLogin(res.data.session);
+  }catch(err){msg.className="over";msg.textContent=errText(err)}
+  finally{$("authBtn").disabled=false}
+});
+$("authForgot").addEventListener("click",async()=>{
+  const email=$("authEmail").value.trim(),msg=$("authMsg");
+  if(!email){msg.className="over";msg.textContent="Nhập email của bạn ở ô trên rồi bấm lại.";return}
+  const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
+  msg.className=error?"over":"ok";msg.textContent=error?errText(error):"Đã gửi email đặt lại mật khẩu. Hãy kiểm tra hộp thư.";
+});
+async function recover(){
+  const p=prompt("Nhập mật khẩu mới (tối thiểu 6 ký tự):");
+  if(!p)return;
+  if(p.length<6)return alert("Mật khẩu cần tối thiểu 6 ký tự.");
+  const {error}=await sb.auth.updateUser({password:p});
+  toast(error?errText(error):"Đã đổi mật khẩu");
+}
+$("syncNow").addEventListener("click",async()=>{if(user){clearTimeout(pushT);await syncOnLogin()}});
+$("signOut").addEventListener("click",async()=>{
+  if(!user)return;
+  if(!confirm("Đăng xuất? Dữ liệu trên máy này sẽ được xóa (vẫn lưu an toàn trên tài khoản)."))return;
+  if(meta.dirty){
+    clearTimeout(pushT);
+    const ok=await push();
+    if(!ok&&!confirm("Chưa đồng bộ được thay đổi mới nhất. Đăng xuất bây giờ sẽ MẤT các thay đổi đó. Vẫn đăng xuất?"))return;
+  }
+  user=null;
+  try{await sb.auth.signOut()}catch{}
+  try{localStorage.removeItem(KEY);localStorage.removeItem(META)}catch{}
+  S=defaults();meta={uid:null,syncedAt:null,dirty:false};editId=null;
+  resetForm();refreshUI();go("overview");showAuth();
+});
+document.addEventListener("visibilitychange",()=>{
+  if(!sb||!user)return;
+  if(document.hidden){if(meta.dirty){clearTimeout(pushT);push()}}
+  else pullIfChanged();
+});
+window.addEventListener("online",()=>{if(sb&&user&&meta.dirty)push()});
+
+async function initSync(){
+  if(!(CFG.SUPABASE_URL&&CFG.SUPABASE_ANON_KEY&&window.supabase))return;
+  sb=window.supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_ANON_KEY);
+  $("acctCard").hidden=false;
+  sb.auth.onAuthStateChange((ev)=>{
+    if(ev==="PASSWORD_RECOVERY")setTimeout(recover,100);
+    if(ev==="SIGNED_OUT"&&user){user=null;setTimeout(showAuth,0)}
+  });
+  const {data}=await sb.auth.getSession();
+  if(data&&data.session)await afterLogin(data.session);else showAuth();
+}
+initSync();
 </script>
 </body>
 </html>
