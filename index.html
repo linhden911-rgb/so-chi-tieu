@@ -14,7 +14,7 @@
   :root{
     --bg:#eef3f1; --card:#ffffff; --text:#12211e; --muted:#62756f; --line:#e4ebe8; --field:#f4f7f6;
     --accent:#0f766e; --accent2:#14b8a6; --accent-ink:#ffffff; --soft:#dff3ef;
-    --danger:#d9480f; --ok:#15803d; --warn:#b45309; --ico-l:91%; --bar-l:42%;
+    --danger:#d9480f; --ok:#15803d; --warn:#b45309; --bar-mute:#b9d3cd; --ico-l:91%; --bar-l:42%;
     --shadow:0 1px 2px rgba(15,50,45,.05),0 10px 30px rgba(15,50,45,.07);
     --hero:linear-gradient(135deg,#0f766e 0%,#0d9488 55%,#14b8a6 100%);
   }
@@ -22,7 +22,7 @@
     :root{
       --bg:#0a1110; --card:#131f1d; --text:#e8f1ef; --muted:#92a9a3; --line:#233230; --field:#0e1816;
       --accent:#2dd4bf; --accent2:#5eead4; --accent-ink:#04201c; --soft:#16322e;
-      --danger:#fb923c; --ok:#4ade80; --warn:#fbbf24; --ico-l:24%; --bar-l:55%;
+      --danger:#fb923c; --ok:#4ade80; --warn:#fbbf24; --bar-mute:#2c4743; --ico-l:24%; --bar-l:55%;
       --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.25);
       --hero:linear-gradient(135deg,#0b4f4a 0%,#0f766e 60%,#0d9488 100%);
     }
@@ -138,6 +138,34 @@
   .item.warn .ico{box-shadow:0 0 0 2px var(--warn)}
   .catrow{padding:12px 0;border-top:1px solid var(--line)}
   .catrow:first-child{border-top:0;padding-top:0}
+  .cat[data-opencat]{cursor:pointer}
+  .sheet{position:fixed;inset:0;z-index:40;background:var(--bg);overflow:auto;overscroll-behavior:contain}
+  .sheet-in{max-width:760px;margin:0 auto;padding:0 16px 48px}
+  .sheet-head{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;padding:12px 0;margin-bottom:8px;background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+  .sheet-title{flex:1;text-align:center;font-weight:700}
+  .tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:16px}
+  .tiles .card{margin:0}
+  .tiles .sub{font-size:.78rem;color:var(--muted);margin-top:2px}
+  @media (min-width:600px){.tiles{grid-template-columns:repeat(4,1fr)}}
+  .chart{width:100%;height:auto;display:block;overflow:visible}
+  .chart .grid{stroke:var(--line);stroke-width:1}
+  .chart .axis{fill:var(--muted);font-size:11px}
+  .chart .axis.strong{fill:var(--text);font-weight:700}
+  .chart .bar{fill:var(--bar-mute)}
+  .chart .bar.hi{fill:var(--accent)}
+  .chart .bar0{fill:var(--line)}
+  .chart .avg{stroke:var(--muted);stroke-width:1}
+  .chart .hit{fill:transparent;cursor:pointer}
+  .chart .hit:hover,.chart .hit:focus{fill:color-mix(in srgb,var(--accent) 14%,transparent);outline:none}
+  .hbar{display:block;width:100%;padding:9px 0;border:0;border-top:1px solid var(--line);background:none;text-align:left;cursor:pointer;color:inherit;font:inherit}
+  .hbar:first-child{border-top:0}
+  .hbar .fill{background:var(--bar-mute)}
+  .hbar.on .fill{background:var(--accent)}
+  .hbar.dim{opacity:.55}
+  .subh{font-weight:700;margin:16px 0 4px;font-size:.9rem}
+  .tips li{margin:4px 0}
+  details.tbl summary{cursor:pointer;color:var(--muted);font-size:.85rem;margin-top:10px}
+  #tip{position:fixed;z-index:70;background:#12211e;color:#fff;padding:6px 10px;border-radius:8px;font-size:.8rem;pointer-events:none;max-width:240px}
   @media (max-width:480px){.grid{grid-template-columns:1fr}.grid3{grid-template-columns:1fr 1fr}header .month{width:150px}}
 </style>
 </head>
@@ -198,7 +226,7 @@
     </div>
 
     <div class="card">
-      <h2>Tháng này</h2>
+      <div class="row" style="margin-bottom:12px"><h2 style="margin:0">Tháng này</h2><span class="spacer"></span><button class="btn ghost small" data-insight type="button">Xem chi tiết ›</button></div>
       <div class="grid3">
         <div class="stat"><div class="muted">Thu</div><div class="big ok" id="mIn"></div></div>
         <div class="stat"><div class="muted">Chi của mình</div><div class="big" id="mOut"></div></div>
@@ -358,6 +386,18 @@
   <button data-go="debt"><span>🤝</span>Công nợ</button>
   <button data-go="settings"><span>⚙️</span>Cài đặt</button>
 </nav>
+<div id="insight" class="sheet" hidden role="dialog" aria-label="Phân tích chi tiêu">
+  <div class="sheet-in">
+    <div class="sheet-head">
+      <button class="iconbtn" id="insClose" type="button" aria-label="Đóng">←</button>
+      <button class="iconbtn" id="insPrev" type="button" aria-label="Tháng trước">‹</button>
+      <div class="sheet-title" id="insTitle"></div>
+      <button class="iconbtn" id="insNext" type="button" aria-label="Tháng sau">›</button>
+    </div>
+    <div id="insBody"></div>
+  </div>
+</div>
+<div id="tip" role="tooltip" hidden></div>
 <div id="toast" role="status"></div>
 
 <script>
@@ -548,10 +588,10 @@ function renderOverview(){
     if(lim>0){
       const p=v/lim*100,st=p>100?"over":p>=80?"warn":"ok",h=st==="over"?18:st==="warn"?42:hueFor(k);
       const note=st==="over"?`<span class="over">Vượt hạn mức ${fmt(v-lim)}</span>`:st==="warn"?`<span class="warnTxt">Sắp chạm hạn mức, còn ${fmt(lim-v)}</span>`:`<span class="muted">Còn ${fmt(lim-v)}</span>`;
-      return`<div class="cat"><div class="cat-top"><span>${ic} ${esc(k)}${cut}</span><span><b>${fmt(v)}</b> <span class="muted">/ ${fmt(lim)}</span></span></div>
+      return`<div class="cat" data-opencat="${esc(k)}"><div class="cat-top"><span>${ic} ${esc(k)}${cut}</span><span><b>${fmt(v)}</b> <span class="muted">/ ${fmt(lim)}</span></span></div>
         <div class="track"><div class="fill" style="width:${Math.min(100,p)}%;--h:${h}"></div></div><div style="margin-top:3px;font-size:.8rem">${note}</div></div>`;
     }
-    return`<div class="cat"><div class="cat-top"><span>${ic} ${esc(k)}${cut}</span><span><b>${fmt(v)}</b> <span class="muted">· ${Math.round(v/out*100)}%</span></span></div>
+    return`<div class="cat" data-opencat="${esc(k)}"><div class="cat-top"><span>${ic} ${esc(k)}${cut}</span><span><b>${fmt(v)}</b> <span class="muted">· ${Math.round(v/out*100)}%</span></span></div>
       <div class="track"><div class="fill" style="width:${v/out*100}%;--h:${hueFor(k)}"></div></div></div>`;
   }).join("");
 
@@ -667,7 +707,9 @@ $("debtScope").addEventListener("change",renderDebt);
 
 document.addEventListener("click",e=>{
   const wb=e.target.closest("[data-warn]");
-  if(wb){const x=S.tx.find(y=>y.id===wb.dataset.warn);if(x){x.warn=!x.warn;save();render();toast(x.warn?"Đã đánh dấu: có thể tiết kiệm":"Đã bỏ đánh dấu")}return}
+  if(wb){const x=S.tx.find(y=>y.id===wb.dataset.warn);if(x){x.warn=!x.warn;save();render();if(!$("insight").hidden)renderInsight();toast(x.warn?"Đã đánh dấu: có thể tiết kiệm":"Đã bỏ đánh dấu")}return}
+  const oi=e.target.closest("[data-opencat],[data-insight]");
+  if(oi){openInsight(oi.dataset.opencat);return}
   const sw=e.target.closest("[data-showwarn]");
   if(sw){$("filter").value="warn";renderTx();go("tx",true);return}
   const pk=e.target.closest("[data-pick]");
@@ -812,6 +854,182 @@ $("importFile").addEventListener("change",async e=>{
   e.target.value="";
 });
 
+/* ---------- Phân tích chi tiêu ---------- */
+const WD_NAME=["Chủ nhật","Thứ 2","Thứ 3","Thứ 4","Thứ 5","Thứ 6","Thứ 7"],WD_SHORT=["CN","T2","T3","T4","T5","T6","T7"];
+let insMonth="",insCat=null,insDay=null;
+const pad2=n=>String(n).padStart(2,"0");
+const rnd=n=>Math.round(n*10)/10;
+function shiftMonth(m,d){const [y,mo]=m.split("-").map(Number),dt=new Date(y,mo-1+d,1);return dt.getFullYear()+"-"+pad2(dt.getMonth()+1)}
+const fmtK=n=>n>=1e6?String(Math.round(n/1e5)/10).replace(".",",")+"tr":n>=1e3?Math.round(n/1e3)+"k":String(Math.round(n));
+function niceMax(v){if(v<=0)return 1000;const p=Math.pow(10,Math.floor(Math.log10(v))),f=v/p;return(f<=1?1:f<=2?2:f<=4?4:f<=6?6:f<=8?8:10)*p}
+const byAmt=(x,y)=>y.amount-x.amount;
+
+function analyze(m){
+  const [y,mo]=m.split("-").map(Number),N=new Date(y,mo,0).getDate(),nowM=today().slice(0,7);
+  const elapsed=m===nowM?Number(today().slice(8,10)):(m<nowM?N:0);
+  const own=S.tx.filter(t=>t.type==="expense"&&!t.person);
+  const items=own.filter(t=>t.date.startsWith(m));
+  const daily=Array(N+1).fill(0),dayItems=Array.from({length:N+1},()=>[]);
+  items.forEach(t=>{const d=Number(t.date.slice(8,10));if(d>=1&&d<=N){daily[d]+=t.amount;dayItems[d].push(t)}});
+  const total=items.reduce((s,t)=>s+t.amount,0);
+  const by={};items.forEach(t=>{const o=by[t.cat]||(by[t.cat]={sum:0,items:[]});o.sum+=t.amount;o.items.push(t)});
+  const wsum=Array(7).fill(0),wcnt=Array(7).fill(0);
+  for(let d=1;d<=elapsed;d++){const w=new Date(y,mo-1,d).getDay();wsum[w]+=daily[d];wcnt[w]++}
+  const avg=elapsed?total/elapsed:0;
+  const pm=shiftMonth(m,-1),pmN=new Date(Number(pm.slice(0,4)),Number(pm.slice(5)),0).getDate();
+  const lim=m===nowM?Math.min(elapsed,pmN):pmN;
+  const prev=own.filter(t=>t.date.startsWith(pm)&&Number(t.date.slice(8,10))<=lim).reduce((s,t)=>s+t.amount,0);
+  let maxDay=0,minDay=0,zeroDays=0;
+  for(let d=1;d<=N;d++){
+    if(daily[d]>daily[maxDay])maxDay=d;
+    if(d<=elapsed){if(daily[d]===0)zeroDays++;else if(!minDay||daily[d]<daily[minDay])minDay=d}
+  }
+  const flagged=items.filter(t=>t.warn).sort(byAmt),flaggedSum=flagged.reduce((s,t)=>s+t.amount,0);
+  const cutNames=new Set(S.cats.filter(c=>c.cut).map(c=>c.name));
+  const suggest=items.filter(t=>!t.warn&&cutNames.has(t.cat)).sort(byAmt).slice(0,5);
+  const over=S.cats.filter(c=>c.limit>0&&by[c.name]&&by[c.name].sum>c.limit).map(c=>({c,excess:by[c.name].sum-c.limit}));
+  return{m,y,mo,N,nowM,elapsed,items,total,daily,dayItems,by,wsum,wcnt,avg,prev,maxDay,minDay,zeroDays,flagged,flaggedSum,suggest,over,top:[...items].sort(byAmt).slice(0,5)};
+}
+
+const insRow=(t,showDate)=>`<div class="item${t.warn?" warn":""}" style="padding:8px 0"><div class="ico" style="--h:${hueOf(t)};width:36px;height:36px;font-size:1.1rem">${iconOf(t)}</div>
+  <div class="info" style="cursor:default"><b>${esc(t.desc||t.cat)}</b><span class="muted">${showDate?dmy(t.date)+" · ":""}${esc(t.cat)}${t.warn?' · <span class="warnTxt">⚠️ Có thể tiết kiệm</span>':""}</span></div>
+  <div class="amt">${fmt(t.amount)}</div>
+  <button class="wbtn${t.warn?" on":""}" data-warn="${t.id}" type="button" aria-label="Đánh dấu có thể tiết kiệm" title="Có thể tiết kiệm">⚠️</button></div>`;
+
+function colPath(x,y,w,h,r){r=Math.min(4,w/2,h);return`M${rnd(x)},${rnd(y+h)}V${rnd(y+r)}Q${rnd(x)},${rnd(y)} ${rnd(x+r)},${rnd(y)}H${rnd(x+w-r)}Q${rnd(x+w)},${rnd(y)} ${rnd(x+w)},${rnd(y+r)}V${rnd(y+h)}Z`}
+
+function dailyChart(a){
+  const W=Math.max(300,Math.round($("insBody").clientWidth-36)||600),H=220,pl=40,pr=6,pt=22,pb=26,pw=W-pl-pr,ph=H-pt-pb,N=a.N;
+  const mx=niceMax(Math.max(...a.daily.slice(1),a.avg*1.1)),bw=pw/N,bar=Math.min(24,bw*.68);
+  const Y=v=>pt+ph-(v/mx)*ph;
+  let s=`<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="Biểu đồ chi tiêu theo ngày trong tháng">`;
+  [0,.5,1].forEach(f=>{const yy=rnd(Y(mx*f));s+=`<line class="grid" x1="${pl}" x2="${W-pr}" y1="${yy}" y2="${yy}"/><text class="axis" x="${pl-6}" y="${yy+4}" text-anchor="end">${fmtK(mx*f)}</text>`});
+  for(let d=1;d<=N;d++){
+    const v=a.daily[d],x=pl+(d-1)*bw+(bw-bar)/2;
+    if(d>a.elapsed&&v===0)continue;
+    if(v>0){const h=Math.max(3,ph*v/mx);s+=`<path class="bar${d===a.maxDay||d===insDay?" hi":""}" d="${colPath(x,pt+ph-h,bar,h)}"/>`}
+    else s+=`<rect class="bar0" x="${rnd(x)}" y="${pt+ph-2}" width="${rnd(bar)}" height="2"/>`;
+  }
+  if(a.avg>0){const ya=rnd(Y(a.avg));s+=`<line class="avg" x1="${pl}" x2="${W-pr}" y1="${ya}" y2="${ya}"/><text class="axis" x="${W-pr}" y="${ya-4}" text-anchor="end">TB ${fmtK(a.avg)}/ngày</text>`}
+  if(a.maxDay){const x=pl+(a.maxDay-1)*bw+bw/2,h=Math.max(3,ph*a.daily[a.maxDay]/mx);s+=`<text class="axis strong" x="${rnd(Math.min(W-pr-14,Math.max(pl+14,x)))}" y="${rnd(pt+ph-h-5)}" text-anchor="middle">${fmtK(a.daily[a.maxDay])}</text>`}
+  const todayD=a.m===a.nowM?a.elapsed:0;
+  for(let d=1;d<=N;d++){
+    const show=d===1||d%5===0||d===N;if(!show||(d!==N&&N-d<3)||(W<420&&d!==1&&d!==N&&d%10!==0))continue;
+    s+=`<text class="axis${d===todayD?" strong":""}" x="${rnd(pl+(d-1)*bw+bw/2)}" y="${H-8}" text-anchor="middle">${d}</text>`;
+  }
+  for(let d=1;d<=N;d++){
+    if(d>a.elapsed&&a.daily[d]===0)continue;
+    const wd=new Date(a.y,a.mo-1,d).getDay(),n=a.dayItems[d].length;
+    const tip=`${pad2(d)}/${pad2(a.mo)} (${WD_NAME[wd]}): ${a.daily[d]?fmt(a.daily[d])+" · "+n+" khoản":"không chi"}`;
+    s+=`<rect class="hit" x="${rnd(pl+(d-1)*bw)}" y="${pt}" width="${rnd(bw)}" height="${ph}" data-day="${d}" data-tip="${esc(tip)}" tabindex="0" role="button" aria-label="${esc(tip)}"/>`;
+  }
+  return s+"</svg>";
+}
+function weekdayChart(a){
+  const order=[1,2,3,4,5,6,0],vals=order.map(w=>a.wcnt[w]?a.wsum[w]/a.wcnt[w]:0),top=Math.max(...vals);
+  const W=Math.max(280,Math.round($("insBody").clientWidth-36)||320),H=150,pt=20,pb=24,ph=H-pt-pb,bw=W/7,bar=Math.min(24,bw*.6),mx=top||1;
+  let s=`<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="Chi tiêu trung bình theo thứ trong tuần"><line class="grid" x1="0" x2="${W}" y1="${pt+ph}" y2="${pt+ph}"/>`;
+  order.forEach((w,i)=>{
+    const v=vals[i],x=i*bw+(bw-bar)/2,h=v>0?Math.max(3,ph*v/mx):0,hi=top>0&&v===top;
+    if(h)s+=`<path class="bar${hi?" hi":""}" d="${colPath(x,pt+ph-h,bar,h)}"/>`;
+    if(hi)s+=`<text class="axis strong" x="${rnd(i*bw+bw/2)}" y="${rnd(pt+ph-h-5)}" text-anchor="middle">${fmtK(v)}</text>`;
+    s+=`<text class="axis${hi?" strong":""}" x="${rnd(i*bw+bw/2)}" y="${H-7}" text-anchor="middle">${WD_SHORT[w]}</text>`;
+    const tip=`${WD_NAME[w]}: ${a.wcnt[w]?"TB "+fmt(v)+"/ngày":"chưa có dữ liệu"}`;
+    s+=`<rect class="hit" x="${rnd(i*bw)}" y="0" width="${rnd(bw)}" height="${H}" data-tip="${esc(tip)}" style="cursor:default"/>`;
+  });
+  return s+"</svg>";
+}
+
+function renderInsight(){
+  $("tip").hidden=true;
+  const a=analyze(insMonth),body=$("insBody");
+  $("insTitle").textContent="Tháng "+insMonth.split("-").reverse().join("/");
+  $("insNext").disabled=insMonth>=today().slice(0,7);
+  if(!a.items.length){body.innerHTML=`<div class="card empty">🗒️<br>Tháng này chưa có khoản chi của mình.<br><span class="muted">Khoản chi hộ được tính riêng ở tab Công nợ.</span></div>`;return}
+  const dm=d=>pad2(d)+"/"+pad2(a.mo);
+  let h="";
+  // --- 4 chỉ số
+  let delta="";
+  if(a.prev>0){const p=(a.total-a.prev)/a.prev*100,up=p>0;delta=`<div class="sub ${up?"warnTxt":"ok"}">${up?"▲":"▼"} ${Math.abs(Math.round(p))}% so với cùng kỳ tháng trước</div>`}
+  else delta=`<div class="sub">Tháng trước chưa có dữ liệu để so sánh</div>`;
+  h+=`<div class="tiles">
+    <div class="card mini stat"><div class="muted">Tổng chi của mình</div><div class="big">${fmt(a.total)}</div>${delta}</div>
+    <div class="card mini stat"><div class="muted">Trung bình mỗi ngày</div><div class="big">${fmt(a.avg)}</div><div class="sub">tính trên ${a.elapsed} ngày</div></div>
+    <div class="card mini stat"><div class="muted">Ngày chi nhiều nhất</div><div class="big">${a.maxDay?dm(a.maxDay):"—"}</div><div class="sub">${a.maxDay?fmt(a.daily[a.maxDay])+" · "+WD_NAME[new Date(a.y,a.mo-1,a.maxDay).getDay()]:""}</div></div>
+    <div class="card mini stat"><div class="muted">Ngày chi ít nhất</div><div class="big">${a.minDay?dm(a.minDay):"—"}</div><div class="sub">${a.minDay?fmt(a.daily[a.minDay])+" · ":""}${a.zeroDays} ngày không chi</div></div>
+  </div>`;
+  // --- nhận xét
+  const cats=Object.entries(a.by).sort((x,y)=>y[1].sum-x[1].sum);
+  const wv=[0,1,2,3,4,5,6].map(w=>a.wcnt[w]?a.wsum[w]/a.wcnt[w]:0),wTop=Math.max(...wv);
+  const tips=[];
+  if(a.avg>0&&a.maxDay)tips.push(`Ngày chi nhiều nhất là <b>${dm(a.maxDay)}</b> (${fmt(a.daily[a.maxDay])}), gấp ${(a.daily[a.maxDay]/a.avg).toFixed(1).replace(".",",")} lần mức trung bình.`);
+  if(a.zeroDays>0)tips.push(`Có <b>${a.zeroDays} ngày</b> bạn không chi gì.`);
+  tips.push(`Danh mục chi nhiều nhất: <b>${catIcon(cats[0][0])} ${esc(cats[0][0])}</b>, chiếm ${Math.round(cats[0][1].sum/a.total*100)}% (${fmt(cats[0][1].sum)}).`);
+  if(wTop>0&&a.elapsed>=7)tips.push(`Bạn hay chi nhiều nhất vào <b>${WD_NAME[wv.indexOf(wTop)]}</b> (trung bình ${fmt(wTop)}/ngày).`);
+  if(a.flagged.length)tips.push(`Có thể tiết kiệm <b>${fmt(a.flaggedSum)}</b> (${Math.round(a.flaggedSum/a.total*100)}% chi tiêu) từ ${a.flagged.length} khoản đã đánh dấu ⚠️.`);
+  h+=`<div class="card"><h2>Nhận xét nhanh</h2><ul class="tips" style="margin:0;padding-left:18px">${tips.map(x=>`<li>${x}</li>`).join("")}</ul></div>`;
+  // --- theo ngày
+  let day="";
+  if(insDay){
+    const its=a.dayItems[insDay].slice().sort(byAmt),wd=new Date(a.y,a.mo-1,insDay).getDay();
+    day=`<div class="card" style="margin:12px 0 0;box-shadow:none;background:var(--field)"><div class="row"><b>${WD_NAME[wd]}, ${dm(insDay)}</b><span class="spacer"></span><b>${fmt(a.daily[insDay])}</b></div>`+
+      (its.length?`<div class="muted" style="margin:2px 0 4px">${its.length} khoản chi</div>`+its.map(t=>insRow(t,false)).join(""):`<div class="muted" style="padding:8px 0">Ngày này không có khoản chi nào.</div>`)+`</div>`;
+  }
+  const rows=[];for(let d=1;d<=a.N;d++)if(a.daily[d]>0)rows.push(`<tr><td>${dm(d)} · ${WD_SHORT[new Date(a.y,a.mo-1,d).getDay()]}</td><td>${a.dayItems[d].length}</td><td>${fmt(a.daily[d])}</td></tr>`);
+  h+=`<div class="card"><h2>Chi tiêu theo ngày</h2><div class="muted" style="margin:-6px 0 8px">Cột đậm là ngày chi nhiều nhất. Bấm vào một ngày để xem các khoản chi.</div>${dailyChart(a)}${day}
+    <details class="tbl"><summary>Xem dạng bảng</summary><table><tr><th>Ngày</th><th>Số khoản</th><th>Tổng chi</th></tr>${rows.join("")}</table></details></div>`;
+  // --- theo danh mục
+  let cd="";
+  if(insCat&&a.by[insCat]){
+    const o=a.by[insCat],c=S.cats.find(x=>x.name===insCat),its=[...o.items].sort(byAmt);
+    cd=`<div id="insCatBox" class="card" style="margin:12px 0 0;box-shadow:none;background:var(--field)"><div class="row"><b>${catIcon(insCat)} ${esc(insCat)}</b><span class="spacer"></span><b>${fmt(o.sum)}</b></div>
+      <div class="muted" style="margin:2px 0 4px">${its.length} khoản · TB ${fmt(o.sum/its.length)}/khoản${c&&c.limit>0?` · hạn mức ${fmt(c.limit)} (${o.sum>c.limit?"vượt "+fmt(o.sum-c.limit):"còn "+fmt(c.limit-o.sum)})`:""}</div>`+its.map(t=>insRow(t,true)).join("")+`</div>`;
+  }
+  h+=`<div class="card"><h2>Chi tiêu theo danh mục</h2><div class="muted" style="margin:-6px 0 4px">Bấm vào một danh mục để xem từng khoản.</div>`+
+    cats.map(([k,o])=>{const on=insCat===k;return`<button class="hbar${on?" on":""}${insCat&&!on?" dim":""}" type="button" data-icat="${esc(k)}" aria-pressed="${on}"><div class="cat-top"><span>${catIcon(k)} ${esc(k)}</span><span><b>${fmt(o.sum)}</b> <span class="muted">· ${Math.round(o.sum/a.total*100)}%</span></span></div><div class="track"><div class="fill" style="width:${o.sum/a.total*100}%"></div></div></button>`}).join("")+cd+`</div>`;
+  // --- theo thứ trong tuần
+  h+=`<div class="card"><h2>Thứ nào chi nhiều?</h2><div class="muted" style="margin:-6px 0 8px">Trung bình chi mỗi ngày theo thứ trong tuần.</div>${weekdayChart(a)}</div>`;
+  // --- tiết kiệm
+  let sv=`<div class="card"><h2>⚠️ Khoản có thể tiết kiệm</h2>`;
+  if(a.flagged.length)sv+=`<div class="big" style="color:var(--warn)">${fmt(a.flaggedSum)}</div><div class="muted" style="margin-bottom:6px">${a.flagged.length} khoản đã đánh dấu · ${Math.round(a.flaggedSum/a.total*100)}% chi tiêu của tháng</div>`+a.flagged.map(t=>insRow(t,true)).join("");
+  else sv+=`<div class="muted">Bạn chưa đánh dấu khoản nào. Bấm nút ⚠️ ở cuối mỗi khoản để đánh dấu.</div>`;
+  if(a.over.length)sv+=`<div class="subh">Danh mục vượt hạn mức</div>`+a.over.map(o=>`<div class="item" style="padding:6px 0"><div class="info" style="cursor:default"><b>${catIcon(o.c.name)} ${esc(o.c.name)}</b><span class="muted">Cắt bớt khoảng số này để về đúng hạn mức</span></div><div class="amt warnTxt">−${fmt(o.excess)}</div></div>`).join("");
+  if(a.suggest.length)sv+=`<div class="subh">Gợi ý xem lại</div><div class="muted">Thuộc danh mục "Hay cắt giảm", chưa đánh dấu:</div>`+a.suggest.map(t=>insRow(t,true)).join("");
+  if(!a.flagged.length&&!a.over.length&&!a.suggest.length)sv+=`<div class="muted" style="margin-top:6px">Mẹo: vào Cài đặt, tick "⚠️ Hay cắt giảm" cho các danh mục như Giải trí, Mua sắm để app tự gợi ý khoản nên xem lại.</div>`;
+  h+=sv+`</div>`;
+  // --- khoản lớn nhất
+  h+=`<div class="card"><h2>5 khoản chi lớn nhất</h2>${a.top.map(t=>insRow(t,true)).join("")}</div>`;
+  h+=`<div class="muted" style="text-align:center">Chỉ tính chi tiêu của mình, không gồm khoản chi hộ.</div>`;
+  body.innerHTML=h;
+}
+function openInsight(cat){
+  insMonth=$("month").value;insCat=cat||null;insDay=null;
+  $("insight").hidden=false;document.body.style.overflow="hidden";
+  renderInsight();$("insight").scrollTop=0;
+  if(insCat){const el=$("insCatBox");if(el)el.scrollIntoView({block:"center"})}
+}
+function closeInsight(){$("insight").hidden=true;document.body.style.overflow="";$("tip").hidden=true}
+function moveInsight(d){insMonth=shiftMonth(insMonth,d);insDay=null;insCat=null;$("month").value=insMonth;render();renderInsight();$("insight").scrollTop=0}
+$("insight").addEventListener("click",e=>{
+  if(e.target.closest("#insClose"))return closeInsight();
+  if(e.target.closest("#insPrev"))return moveInsight(-1);
+  if(e.target.closest("#insNext"))return moveInsight(1);
+  const d=e.target.closest("[data-day]");if(d){const n=Number(d.dataset.day);insDay=insDay===n?null:n;renderInsight();return}
+  const c=e.target.closest("[data-icat]");if(c){insCat=insCat===c.dataset.icat?null:c.dataset.icat;renderInsight()}
+});
+$("insight").addEventListener("keydown",e=>{
+  const d=e.target.closest&&e.target.closest("[data-day]");
+  if(d&&(e.key==="Enter"||e.key===" ")){e.preventDefault();const n=Number(d.dataset.day);insDay=insDay===n?null:n;renderInsight()}
+});
+$("insight").addEventListener("pointermove",e=>{
+  const el=e.target.closest("[data-tip]"),tip=$("tip");
+  if(!el){tip.hidden=true;return}
+  tip.textContent=el.getAttribute("data-tip");tip.hidden=false;
+  const w=tip.offsetWidth;tip.style.left=Math.min(innerWidth-w-8,Math.max(8,e.clientX-w/2))+"px";tip.style.top=Math.max(8,e.clientY-tip.offsetHeight-14)+"px";
+});
+$("insight").addEventListener("pointerleave",()=>{$("tip").hidden=true});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("insight").hidden)closeInsight()});
+
 /* ---------- Mật khẩu / khóa màn hình ---------- */
 function loadLock(){try{return JSON.parse(localStorage.getItem(LKEY))||null}catch{return null}}
 let LOCK=loadLock(); // {salt, hash, auto}
@@ -842,7 +1060,7 @@ function renderSecurity(){
 function pwMsg(t){const el=$("pwMsg");el.textContent=t;el.hidden=!t}
 function lockNow(){
   if(!LOCK)return;
-  document.body.classList.add("locked");$("lockPw").value="";$("lockMsg").textContent="";go("overview");
+  document.body.classList.add("locked");closeInsight();$("lockPw").value="";$("lockMsg").textContent="";go("overview");
   setTimeout(()=>$("lockPw").focus(),50);
 }
 $("pwForm").addEventListener("submit",async e=>{
